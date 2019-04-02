@@ -1,8 +1,13 @@
 library(tidyverse)
+library(BayesFactor)
+
+###################################
+# basic data handling
+###################################
 
 # define subject number
-exp=1
-subj=5
+exp=2
+subj=2
 
 dataStringA = paste0("https://raw.githubusercontent.com/tomfaulkenberry/sft-fraction/master/exp", 
                       exp,
@@ -19,13 +24,45 @@ data = rawdata %>%
   select(correct, denomSalience, numSalience, numerator, denominator, response_time, subject_nr) %>%
   filter(correct==1) %>%
   mutate(rt = response_time) %>%
-  filter(rt > 200 & rt < 1200)
+  filter(rt > 200 & rt < mean(rt)+3*sd(rt))
 
 
 data %>%
   ggplot(aes(x=rt))+
   geom_density()
-  
+
+
+########################################
+# ANOVAs for subject
+
+dat = data %>% filter(numerator>5 & denominator>5)
+dat = data.frame(dat)
+dat$denomSalience = factor(dat$denomSalience)
+dat$numSalience = factor(dat$numSalience)
+tradModel = summary(aov(rt~denomSalience*numSalience, data=dat))
+bayesModel = sort(anovaBF(rt~denomSalience*numSalience, data=dat), decreasing=TRUE)
+
+########################################
+# MIC analysis
+#########################################
+
+dat = data %>% filter(numerator > 5 & denominator > 5)
+mrt = tapply(dat$rt,list(dat$denomSalience,dat$numSalience),mean)
+mic = mrt[1,1] + mrt[2,2] - mrt[1,2] - mrt[2,1]
+
+data %>%
+  filter(numerator > 5 & denominator > 5) %>%
+  group_by(denomSalience, numSalience) %>%
+  summarize(meanRT = mean(rt), sdRT = sd(rt)) %>%
+  ggplot(aes(x=numSalience, y=meanRT, group=denomSalience)) +
+  geom_point(aes(shape=denomSalience), size=3) +
+  geom_line(aes(linetype=denomSalience)) +
+  theme_classic(18) +
+  annotate("text", x=1, y=660, label=paste0("MIC=",round(mic,1)))
+
+########################################
+# SIC analysis
+#####################################
 
 # construct survivor functions
 
@@ -176,3 +213,4 @@ axis(1)
 mtext("RT (msec)", side = 1, line = 3, cex = 1.3, font = 2)
 axis(2)
 par(las = 0)
+
